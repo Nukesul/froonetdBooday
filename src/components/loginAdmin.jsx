@@ -19,40 +19,55 @@ const LoginAdmin = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         const { username, password } = state;
+    
         setState((prev) => ({ ...prev, loading: true, error: '', message: '' }));
-
+    
         if (!username || !password) {
             setState((prev) => ({ ...prev, error: 'Пожалуйста, заполните все поля', loading: false }));
             return;
         }
-
+    
         try {
-            console.log('Sending login request:', { username, password });
+            console.log('Отправка запроса на вход:', { username, password });
+    
             const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/login/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ username, password }),
-                credentials: 'include',  // Для сессий
+                mode: 'cors', // Разрешает CORS-запрос
+                credentials: 'include', // Для работы с сессионными куками
             });
-
+    
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `Ошибка ${response.status}: Не удалось войти`);
+                let errorMessage = `Ошибка ${response.status}: Не удалось войти`;
+                const errorData = await response.json().catch(() => null);
+                if (errorData && errorData.detail) {
+                    errorMessage = errorData.detail;
+                }
+                throw new Error(errorMessage);
             }
-
+    
             const data = await response.json();
-            console.log('Response from server:', data);
-
+            console.log('Ответ от сервера:', data);
+    
             setState((prev) => ({ ...prev, message: 'Вход успешен', loading: false }));
             localStorage.setItem('isAdminLoggedIn', 'true');
+    
             setTimeout(() => {
                 navigate('/admin/dashboard');
             }, 1000);
         } catch (err) {
-            console.error('Error during login:', err);
-            setState((prev) => ({ ...prev, error: err.message || 'Ошибка сервера. Попробуйте позже.', loading: false }));
+            console.error('Ошибка при входе:', err.message);
+            setState((prev) => ({
+                ...prev,
+                error: err.message || 'Ошибка сервера. Попробуйте позже.',
+                loading: false,
+            }));
         }
     };
+    
 
     const { username, password, error, message, loading } = state;
 
