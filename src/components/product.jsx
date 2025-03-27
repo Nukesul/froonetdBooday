@@ -47,15 +47,15 @@ class ProductClass extends Component {
   fetchBranches = async () => {
     try {
       this.setState({ loading: true, error: null });
-      const response = await fetch('nukesul-boood-2ab7.twc1.net/api/public/branches');
+      const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/public/branches/');
       const data = await response.json();
       if (response.ok) {
         this.setState({ branches: data });
       } else {
-        this.setState({ error: data.message });
+        this.setState({ error: data.message || 'Ошибка загрузки филиалов' });
       }
     } catch (err) {
-      this.setState({ error: 'Ошибка при загрузке филиалов' });
+      this.setState({ error: 'Ошибка сервера при загрузке филиалов' });
     } finally {
       this.setState({ loading: false });
     }
@@ -64,15 +64,15 @@ class ProductClass extends Component {
   fetchCategories = async () => {
     try {
       this.setState({ loading: true, error: null });
-      const response = await fetch('nukesul-boood-2ab7.twc1.net/api/public/categories');
+      const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/public/categories/');
       const data = await response.json();
       if (response.ok) {
         this.setState({ categories: data });
       } else {
-        this.setState({ error: data.message });
+        this.setState({ error: data.message || 'Ошибка загрузки категорий' });
       }
     } catch (err) {
-      this.setState({ error: 'Ошибка при загрузке категорий' });
+      this.setState({ error: 'Ошибка сервера при загрузке категорий' });
     } finally {
       this.setState({ loading: false });
     }
@@ -81,15 +81,15 @@ class ProductClass extends Component {
   fetchProducts = async () => {
     try {
       this.setState({ loading: true, error: null });
-      const response = await fetch('nukesul-boood-2ab7.twc1.net/api/public/products');
+      const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/public/products/');
       const data = await response.json();
       if (response.ok) {
         this.setState({ products: data });
       } else {
-        this.setState({ error: data.message });
+        this.setState({ error: data.message || 'Ошибка загрузки продуктов' });
       }
     } catch (err) {
-      this.setState({ error: 'Ошибка при загрузке продуктов' });
+      this.setState({ error: 'Ошибка сервера при загрузке продуктов' });
     } finally {
       this.setState({ loading: false });
     }
@@ -110,10 +110,10 @@ class ProductClass extends Component {
   addToCart = (size) => {
     const { selectedProduct, cart } = this.state;
     const cartItem = {
-      id: selectedProduct._id,
+      id: selectedProduct.id, // Используем 'id' вместо '_id'
       name: selectedProduct.name,
       size: size,
-      price: selectedProduct.prices[size] || selectedProduct.price,
+      price: selectedProduct.prices ? selectedProduct.prices[size] : selectedProduct.price,
       image: selectedProduct.image, // Добавляем изображение в корзину
     };
     this.setState({ cart: [...cart, cartItem], selectedProduct: null });
@@ -122,7 +122,7 @@ class ProductClass extends Component {
   getCartSummary = () => {
     const { cart } = this.state;
     const totalItems = cart.length;
-    const totalPrice = cart.reduce((sum, item) => sum + item.price, 0);
+    const totalPrice = cart.reduce((sum, item) => sum + (item.price || 0), 0);
     return { totalItems, totalPrice };
   };
 
@@ -139,11 +139,11 @@ class ProductClass extends Component {
     let currentCategory = null;
 
     for (const category of categories) {
-      const element = document.getElementById(`category-${category._id}`);
+      const element = document.getElementById(`category-${category.id}`);
       if (element) {
         const rect = element.getBoundingClientRect();
         if (rect.top <= 100 && rect.bottom >= 100) {
-          currentCategory = category._id;
+          currentCategory = category.id;
           break;
         }
       }
@@ -154,7 +154,6 @@ class ProductClass extends Component {
     }
   };
 
-  // Переход на страницу оформления заказа
   goToCheckout = () => {
     this.props.navigate('/checkout');
   };
@@ -184,12 +183,12 @@ class ProductClass extends Component {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {branches.map((branch) => (
                 <button
-                  key={branch._id}
+                  key={branch.id} // Используем 'id' вместо '_id'
                   onClick={() => this.selectBranch(branch)}
                   className="bg-white rounded-xl shadow-lg p-6 text-left hover:bg-orange-500 hover:text-white transition-all duration-300 transform hover:scale-105"
                 >
                   <h2 className="text-xl font-semibold">{branch.name}</h2>
-                  <p className="text-gray-600 group-hover:text-white">{branch.city}</p>
+                  <p className="text-gray-600 group-hover:text-white">{branch.address}</p> {/* Используем 'address' вместо 'city' */}
                 </button>
               ))}
             </div>
@@ -202,7 +201,7 @@ class ProductClass extends Component {
       <div className="min-h-screen bg-gray-100 py-8">
         {/* Информация о филиале */}
         <div className="text-center mb-6">
-          <p className="text-gray-700">Филиал: {selectedBranch.name}, {selectedBranch.city}</p>
+          <p className="text-gray-700">Филиал: {selectedBranch.name}, {selectedBranch.address}</p>
           {!orderPlaced && (
             <button
               onClick={() => this.setState({ selectedBranch: null })}
@@ -219,8 +218,8 @@ class ProductClass extends Component {
             {categories.map((category) => {
               const categoryProducts = products.filter(
                 (product) =>
-                  product.subcategory.category.toString() === category._id &&
-                  product.branch._id.toString() === selectedBranch._id
+                  product.subcategory.category === category.id && // Используем 'id' вместо '_id'
+                  product.branch === selectedBranch.id // Фильтрация по филиалу
               );
 
               if (categoryProducts.length === 0) {
@@ -229,10 +228,10 @@ class ProductClass extends Component {
 
               return (
                 <button
-                  key={category._id}
-                  onClick={() => this.scrollToCategory(category._id)}
+                  key={category.id}
+                  onClick={() => this.scrollToCategory(category.id)}
                   className={`relative text-lg font-semibold transition-all duration-300 whitespace-nowrap px-4 py-2 rounded-full group ${
-                    activeCategory === category._id
+                    activeCategory === category.id
                       ? 'text-orange-500'
                       : 'text-gray-800 hover:text-orange-500'
                   }`}
@@ -243,7 +242,7 @@ class ProductClass extends Component {
                       {category.name}
                       <span
                         className={`absolute bottom-0 left-0 h-1 bg-orange-500 rounded-full transition-all duration-300 ${
-                          activeCategory === category._id ? 'w-full' : 'w-0 group-hover:w-full'
+                          activeCategory === category.id ? 'w-full' : 'w-0 group-hover:w-full'
                         }`}
                       ></span>
                     </span>
@@ -266,8 +265,8 @@ class ProductClass extends Component {
             categories.map((category) => {
               const categoryProducts = products.filter(
                 (product) =>
-                  product.subcategory.category.toString() === category._id &&
-                  product.branch._id.toString() === selectedBranch._id
+                  product.subcategory.category === category.id &&
+                  product.branch === selectedBranch.id
               );
 
               if (categoryProducts.length === 0) {
@@ -275,7 +274,7 @@ class ProductClass extends Component {
               }
 
               return (
-                <div key={category._id} id={`category-${category._id}`} className="mb-16">
+                <div key={category.id} id={`category-${category.id}`} className="mb-16">
                   <h2 className="text-4xl font-bold text-white mb-10 text-center relative animate-fadeIn">
                     <span
                       className="inline-block px-8 py-3 rounded-lg relative z-10"
@@ -312,14 +311,14 @@ class ProductClass extends Component {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {categoryProducts.map((product) => (
                       <div
-                        key={product._id}
+                        key={product.id}
                         className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 transform hover:-translate-y-2 hover:shadow-2xl"
                       >
                         <div className="relative">
                           <img
                             src={
                               product.image
-                                ? `nukesul-boood-2ab7.twc1.net${product.image}`
+                                ? `https://nukesul-boood-2ab7.twc1.net${product.image}`
                                 : 'https://via.placeholder.com/150?text=Image+Not+Found'
                             }
                             alt={product.name}
@@ -335,7 +334,8 @@ class ProductClass extends Component {
                         <div className="p-5">
                           <h3 className="text-xl font-bold text-gray-800">{product.name}</h3>
                           <p className="text-gray-500 text-sm mt-1">
-                            от {product.prices?.small || product.price || 'Не указана'} сом
+                            от{' '}
+                            {product.prices?.small || product.price || 'Не указана'} сом
                           </p>
                           <button
                             onClick={() => this.openModal(product)}
@@ -359,7 +359,7 @@ class ProductClass extends Component {
               <img
                 src={
                   selectedProduct.image
-                    ? `nukesul-boood-2ab7.twc1.net${selectedProduct.image}`
+                    ? `https://nukesul-boood-2ab7.twc1.net${selectedProduct.image}`
                     : 'https://via.placeholder.com/150?text=Image+Not+Found'
                 }
                 alt={selectedProduct.name}
@@ -430,7 +430,7 @@ class ProductClass extends Component {
           </button>
         )}
 
-        {/* Добавляем стили для анимации */}
+        {/* Стили для анимации */}
         <style jsx>{`
           @keyframes fadeIn {
             0% {
