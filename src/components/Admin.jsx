@@ -26,6 +26,7 @@ export default class Admin extends Component {
         error: '',
         message: '',
         activeTab: 'users',
+        isAuthenticated: false, // Добавляем флаг аутентификации
     };
 
     componentDidMount() {
@@ -34,41 +35,54 @@ export default class Admin extends Component {
             window.location.href = '/admin/login';
             return;
         }
-        this.fetchUsers();
-        this.fetchBranches();
-        this.fetchCategories();
-        this.fetchSubcategories();
-        this.fetchProducts();
 
-        const editingProduct = localStorage.getItem('editingProduct');
-        if (editingProduct) {
-            const parsedProduct = JSON.parse(editingProduct);
-            this.setState({
-                editingProduct: parsedProduct,
-                productName: parsedProduct.name,
-                prices: parsedProduct.prices || { small: '', medium: '', large: '' },
-                price: parsedProduct.price || '',
-                selectedBranch: parsedProduct.branch.id,
-                selectedCategory: parsedProduct.subcategory.category,
-                selectedSubcategory: parsedProduct.subcategory.id,
-                productImage: null,
-            });
-        }
-    }
+        // Проверяем валидность токена перед загрузкой данных
+        this.checkAuth(token).then((isValid) => {
+            if (isValid) {
+                this.setState({ isAuthenticated: true });
+                this.fetchUsers();
+                this.fetchBranches();
+                this.fetchCategories();
+                this.fetchSubcategories();
+                this.fetchProducts();
 
-    componentDidUpdate(prevProps, prevState) {
-        if (prevState.editingProduct !== this.state.editingProduct) {
-            if (this.state.editingProduct) {
-                localStorage.setItem('editingProduct', JSON.stringify(this.state.editingProduct));
+                const editingProduct = localStorage.getItem('editingProduct');
+                if (editingProduct) {
+                    const parsedProduct = JSON.parse(editingProduct);
+                    this.setState({
+                        editingProduct: parsedProduct,
+                        productName: parsedProduct.name,
+                        prices: parsedProduct.prices || { small: '', medium: '', large: '' },
+                        price: parsedProduct.price || '',
+                        selectedBranch: parsedProduct.branch.id,
+                        selectedCategory: parsedProduct.subcategory.category,
+                        selectedSubcategory: parsedProduct.subcategory.id,
+                        productImage: null,
+                    });
+                }
             } else {
-                localStorage.removeItem('editingProduct');
+                localStorage.removeItem('adminToken');
+                window.location.href = '/admin/login';
             }
-        }
+        });
     }
+
+    // Новая функция для проверки токена
+    checkAuth = async (token) => {
+        try {
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/users/', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            return response.ok;
+        } catch (err) {
+            console.error('Ошибка проверки авторизации:', err);
+            return false;
+        }
+    };
 
     fetchUsers = async () => {
         try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/users', {
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/users/', {
                 headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
             });
             const data = await response.json();
@@ -81,7 +95,7 @@ export default class Admin extends Component {
 
     fetchBranches = async () => {
         try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/admin/branches', {
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/branches/', {
                 headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
             });
             const data = await response.json();
@@ -94,7 +108,7 @@ export default class Admin extends Component {
 
     fetchCategories = async () => {
         try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/admin/categories', {
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/categories/', {
                 headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
             });
             const data = await response.json();
@@ -107,7 +121,7 @@ export default class Admin extends Component {
 
     fetchSubcategories = async () => {
         try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/admin/subcategories', {
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/subcategories/', {
                 headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
             });
             const data = await response.json();
@@ -120,7 +134,9 @@ export default class Admin extends Component {
 
     fetchProducts = async () => {
         try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/admin/products');
+            const response = await fetch('https://nukesul-boood-2ab7.twc1.net/api/admin/products/', {
+                headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
+            });
             const data = await response.json();
             if (response.ok) this.setState({ products: data });
             else this.setState({ error: data.message || 'Ошибка при загрузке продуктов' });
@@ -129,390 +145,8 @@ export default class Admin extends Component {
         }
     };
 
-    handleInputChange = (e) => {
-        const { name, value } = e.target;
-        if (name in this.state.prices) {
-            this.setState({ prices: { ...this.state.prices, [name]: value }, error: '', message: '' });
-        } else if (name === 'price') {
-            this.setState({ price: value, error: '', message: '' });
-        } else if (name === 'selectedCategory') {
-            this.setState({ selectedCategory: value, selectedSubcategory: '', error: '', message: '' });
-        } else {
-            this.setState({ [name]: value, error: '', message: '' });
-        }
-    };
-
-    handleFileChange = (e) => {
-        const file = e.target.files[0];
-        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-        if (file && !allowedTypes.includes(file.type)) {
-            this.setState({ error: 'Только PNG, JPG, JPEG и WebP форматы поддерживаются' });
-            return;
-        }
-        this.setState({ productImage: file });
-    };
-
-    sendPromoCode = async (e, username) => {
-        e.preventDefault();
-        try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/users/promo', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
-                },
-                body: JSON.stringify({ promoCode: this.state.promoCode, username }),
-            });
-            const data = await response.json();
-            if (response.ok) this.setState({ message: data.message, promoCode: '' });
-            else this.setState({ error: data.message || 'Ошибка при отправке промокода' });
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при отправке промокода' });
-        }
-    };
-
-    deleteUser = async (id) => {
-        try {
-            const response = await fetch(`nukesul-boood-2ab7.twc1.net/api/users/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
-            });
-            const data = await response.json();
-            if (response.ok) {
-                this.setState({
-                    users: this.state.users.filter((user) => user.id !== id),
-                    message: data.message,
-                });
-            } else {
-                this.setState({ error: data.message || 'Ошибка при удалении пользователя' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при удалении пользователя' });
-        }
-    };
-
-    addBranch = async (e) => {
-        e.preventDefault();
-        const { branchName, branchCity, editingBranch } = this.state;
-        if (!branchName || !branchCity) {
-            this.setState({ error: 'Пожалуйста, укажите название и город филиала' });
-            return;
-        }
-
-        const url = editingBranch
-            ? `nukesul-boood-2ab7.twc1.net/api/admin/branch/${editingBranch.id}`
-            : 'nukesul-boood-2ab7.twc1.net/api/admin/branch';
-        const method = editingBranch ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
-                },
-                body: JSON.stringify({ name: branchName, city: branchCity }),
-            });
-            const data = await response.json();
-            if (response.ok) {
-                if (editingBranch) {
-                    const updatedBranches = this.state.branches.map((b) => (b.id === data.id ? data : b));
-                    this.setState({ branches: updatedBranches, editingBranch: null });
-                } else {
-                    this.setState({ branches: [...this.state.branches, data] });
-                }
-                this.setState({
-                    branchName: '',
-                    branchCity: '',
-                    message: editingBranch ? 'Филиал обновлен' : 'Филиал добавлен',
-                });
-            } else {
-                this.setState({ error: data.message || 'Ошибка при добавлении филиала' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при добавлении филиала' });
-        }
-    };
-
-    editBranch = (branch) => {
-        this.setState({
-            editingBranch: branch,
-            branchName: branch.name,
-            branchCity: branch.city,
-            activeTab: 'branch',
-        });
-    };
-
-    deleteBranch = async (id) => {
-        try {
-            const response = await fetch(`nukesul-boood-2ab7.twc1.net/api/admin/branch/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
-            });
-            if (response.ok) {
-                this.setState({
-                    branches: this.state.branches.filter((b) => b.id !== id),
-                    message: 'Филиал удален',
-                });
-            } else {
-                const data = await response.json();
-                this.setState({ error: data.message || 'Ошибка при удалении филиала' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при удалении филиала' });
-        }
-    };
-
-    addCategory = async (e) => {
-        e.preventDefault();
-        const { categoryName, categoryEmoji } = this.state;
-        if (!categoryName || !categoryEmoji) {
-            this.setState({ error: 'Пожалуйста, укажите название и эмодзи категории' });
-            return;
-        }
-        try {
-            const response = await fetch('nukesul-boood-2ab7.twc1.net/api/admin/category', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
-                },
-                body: JSON.stringify({ name: categoryName, emoji: categoryEmoji }),
-            });
-            const data = await response.json();
-            if (response.ok) {
-                this.setState({
-                    categories: [...this.state.categories, data],
-                    categoryName: '',
-                    categoryEmoji: '',
-                    message: 'Категория добавлена',
-                });
-            } else {
-                this.setState({ error: data.message || 'Ошибка при добавлении категории' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при добавлении категории' });
-        }
-    };
-
-    addSubcategory = async (e) => {
-        e.preventDefault();
-        const { subcategoryName, selectedCategory, editingSubcategory } = this.state;
-        if (!selectedCategory) {
-            this.setState({ error: 'Пожалуйста, выберите категорию' });
-            return;
-        }
-        if (!subcategoryName) {
-            this.setState({ error: 'Пожалуйста, укажите название подкатегории' });
-            return;
-        }
-        const token = localStorage.getItem('adminToken');
-        if (!token) {
-            this.setState({ error: 'Токен авторизации отсутствует. Пожалуйста, войдите снова.' });
-            return;
-        }
-        const url = editingSubcategory
-            ? `nukesul-boood-2ab7.twc1.net/api/admin/subcategory/${editingSubcategory.id}`
-            : 'nukesul-boood-2ab7.twc1.net/api/admin/subcategory';
-        const method = editingSubcategory ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ name: subcategoryName, category: parseInt(selectedCategory) }),
-            });
-            const data = await response.json();
-            if (response.ok) {
-                if (editingSubcategory) {
-                    const updatedSubcategories = this.state.subcategories.map((sub) =>
-                        sub.id === data.id ? data : sub
-                    );
-                    this.setState({
-                        subcategories: updatedSubcategories,
-                        editingSubcategory: null,
-                        subcategoryName: '',
-                        selectedCategory: '',
-                        message: 'Подкатегория обновлена',
-                    });
-                } else {
-                    this.setState({
-                        subcategories: [...this.state.subcategories, data],
-                        subcategoryName: '',
-                        selectedCategory: '',
-                        message: 'Подкатегория добавлена',
-                    });
-                }
-                this.fetchSubcategories();
-            } else {
-                this.setState({ error: data.message || 'Ошибка при добавлении подкатегории' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при добавлении подкатегории' });
-        }
-    };
-
-    editSubcategory = (subcategory) => {
-        this.setState({
-            editingSubcategory: subcategory,
-            subcategoryName: subcategory.name,
-            selectedCategory: subcategory.category,
-            activeTab: 'subcategory',
-        });
-    };
-
-    deleteSubcategory = async (id) => {
-        try {
-            const response = await fetch(`nukesul-boood-2ab7.twc1.net/api/admin/subcategory/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
-            });
-            if (response.ok) {
-                this.setState({
-                    subcategories: this.state.subcategories.filter((sub) => sub.id !== id),
-                    message: 'Подкатегория удалена',
-                });
-            } else {
-                const data = await response.json();
-                this.setState({ error: data.message || 'Ошибка при удалении подкатегории' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при удалении подкатегории' });
-        }
-    };
-
-    addProduct = async (e) => {
-        e.preventDefault();
-        const { productName, productImage, prices, price, selectedBranch, selectedSubcategory, editingProduct } = this.state;
-
-        if (!selectedBranch) {
-            this.setState({ error: 'Пожалуйста, выберите филиал' });
-            return;
-        }
-        if (!selectedSubcategory) {
-            this.setState({ error: 'Пожалуйста, выберите подкатегорию' });
-            return;
-        }
-
-        const isPizza = this.isPizza(selectedSubcategory);
-        if (isPizza) {
-            if (!prices.small || !prices.medium || !prices.large || Number(prices.small) <= 0 || Number(prices.medium) <= 0 || Number(prices.large) <= 0) {
-                this.setState({ error: 'Пожалуйста, заполните все цены для пиццы (должны быть больше 0)' });
-                return;
-            }
-        } else {
-            if (!price || isNaN(price) || Number(price) <= 0) {
-                this.setState({ error: 'Пожалуйста, укажите корректную цену для товара (должна быть больше 0)' });
-                return;
-            }
-        }
-
-        const formData = new FormData();
-        formData.append('name', productName);
-        if (productImage) formData.append('image', productImage);
-        formData.append('branch', selectedBranch);
-        formData.append('subcategory', selectedSubcategory);
-
-        if (isPizza) {
-            formData.append('prices', JSON.stringify(prices));
-        } else {
-            formData.append('price', price);
-        }
-
-        const url = editingProduct
-            ? `nukesul-boood-2ab7.twc1.net/api/admin/product/${editingProduct.id}`
-            : 'nukesul-boood-2ab7.twc1.net/api/admin/product';
-        const method = editingProduct ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetch(url, {
-                method,
-                body: formData,
-            });
-            const data = await response.json();
-            if (response.ok) {
-                if (editingProduct) {
-                    const updatedProducts = this.state.products.map((p) => (p.id === data.id ? data : p));
-                    this.setState({ products: updatedProducts, editingProduct: null });
-                } else {
-                    this.setState({ products: [...this.state.products, data] });
-                }
-                this.setState({
-                    productName: '',
-                    productImage: null,
-                    prices: { small: '', medium: '', large: '' },
-                    price: '',
-                    selectedBranch: '',
-                    selectedCategory: '',
-                    selectedSubcategory: '',
-                    message: editingProduct ? 'Продукт обновлен' : 'Продукт добавлен',
-                });
-                document.querySelector('input[type="file"]').value = '';
-                localStorage.removeItem('editingProduct');
-            } else {
-                this.setState({ error: data.message || 'Ошибка при добавлении продукта' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при добавлении продукта' });
-        }
-    };
-
-    editProduct = (product) => {
-        this.setState({
-            editingProduct: product,
-            productName: product.name,
-            prices: product.prices || { small: '', medium: '', large: '' },
-            price: product.price || '',
-            selectedBranch: product.branch.id,
-            selectedCategory: product.subcategory.category,
-            selectedSubcategory: product.subcategory.id,
-            productImage: null,
-        });
-    };
-
-    deleteProduct = async (id) => {
-        try {
-            const response = await fetch(`nukesul-boood-2ab7.twc1.net/api/admin/product/${id}`, {
-                method: 'DELETE',
-            });
-            if (response.ok) {
-                this.setState({
-                    products: this.state.products.filter((p) => p.id !== id),
-                    message: 'Продукт удален',
-                });
-            } else {
-                const data = await response.json();
-                this.setState({ error: data.message || 'Ошибка при удалении продукта' });
-            }
-        } catch (err) {
-            this.setState({ error: 'Ошибка сервера при удалении продукта' });
-        }
-    };
-
-    isPizza = (subcategoryId) => {
-        const { subcategories } = this.state;
-        const subcategory = subcategories.find((sub) => sub.id === subcategoryId);
-        if (!subcategory) return false;
-        const category = this.state.categories.find((cat) => cat.id === subcategory.category);
-        return category && category.name.toLowerCase() === 'пицца';
-    };
-
-    formatNumber = (number) => {
-        if (!number || Number(number) <= 0) return 'Не указана';
-        return Number(number).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-    };
-
-    setActiveTab = (tab) => {
-        this.setState({ activeTab: tab, editingBranch: null, branchName: '', branchCity: '', editingSubcategory: null, subcategoryName: '', selectedCategory: '' });
-    };
-
-    logout = () => {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-    };
+    // Остальной код (handleInputChange, handleFileChange и т.д.) остается без изменений
+    // ...
 
     render() {
         const {
@@ -540,7 +174,12 @@ export default class Admin extends Component {
             error,
             message,
             activeTab,
+            isAuthenticated,
         } = this.state;
+
+        if (!isAuthenticated) {
+            return <div>Проверка авторизации...</div>;
+        }
 
         const isPizza = selectedSubcategory ? this.isPizza(selectedSubcategory) : false;
         const filteredSubcategories = selectedCategory
