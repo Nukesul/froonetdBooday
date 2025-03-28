@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Функциональный компонент Product с хуками
 const Product = () => {
   const navigate = useNavigate();
 
@@ -18,75 +17,141 @@ const Product = () => {
     orderPlaced: false,
   });
 
-  // Обновление состояния с помощью функции
-  const updateState = (newState) => setState((prev) => ({ ...prev, ...newState }));
+  const updateState = (newState) => {
+    console.log('Updating state with:', newState);
+    setState((prev) => ({ ...prev, ...newState }));
+  };
 
-  // Загрузка данных с API
   const fetchData = useCallback(async (url, key, errorMessage) => {
+    console.log(`Fetching data from ${url} for ${key}`);
     try {
       updateState({ loading: true, error: null });
       const response = await fetch(url);
-      const data = await response.json();
-      if (response.ok) {
-        updateState({ [key]: data });
-      } else {
-        updateState({ error: data.message || errorMessage });
+      console.log(`Response status for ${key}:`, response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
+      const data = await response.json();
+      console.log(`Data received for ${key}:`, data);
+      if (!Array.isArray(data)) {
+        console.error(`Expected array for ${key}, got:`, data);
+        throw new Error(`Invalid data format for ${key}`);
+      }
+      updateState({ [key]: data });
     } catch (err) {
-      updateState({ error: `Ошибка сервера при загрузке ${key}` });
+      console.error(`Error fetching ${key}:`, err.message);
+      updateState({ error: err.message || `Ошибка сервера при загрузке ${key}` });
     } finally {
       updateState({ loading: false });
     }
   }, []);
 
-  // Инициализация данных
   useEffect(() => {
+    console.log('Component mounted, fetching initial data');
     fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
     fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий');
     fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов');
 
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) updateState({ cart: JSON.parse(savedCart) });
+    try {
+      const savedCart = localStorage.getItem('cart');
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+        console.log('Loaded cart from localStorage:', parsedCart);
+        updateState({ cart: parsedCart });
+      } else {
+        console.log('No cart found in localStorage');
+      }
 
-    const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
-    updateState({ orderPlaced });
+      const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
+      console.log('Order placed status:', orderPlaced);
+      updateState({ orderPlaced });
+    } catch (err) {
+      console.error('Error loading from localStorage:', err.message);
+      updateState({ error: 'Ошибка загрузки данных из localStorage' });
+    }
 
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      console.log('Component unmounted, removing scroll listener');
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, [fetchData]);
 
-  // Сохранение корзины в localStorage
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(state.cart));
+    console.log('Cart updated, saving to localStorage:', state.cart);
+    try {
+      localStorage.setItem('cart', JSON.stringify(state.cart));
+    } catch (err) {
+      console.error('Error saving cart to localStorage:', err.message);
+      updateState({ error: 'Ошибка сохранения корзины' });
+    }
   }, [state.cart]);
 
-  // Обработчики
-  const selectBranch = (branch) => updateState({ selectedBranch: branch });
-  const openModal = (product) => updateState({ selectedProduct: product });
-  const closeModal = () => updateState({ selectedProduct: null });
+  const selectBranch = (branch) => {
+    console.log('Selected branch:', branch);
+    updateState({ selectedBranch: branch });
+  };
+
+  const openModal = (product) => {
+    console.log('Opening modal for product:', product);
+    updateState({ selectedProduct: product });
+  };
+
+  const closeModal = () => {
+    console.log('Closing modal');
+    updateState({ selectedProduct: null });
+  };
 
   const addToCart = (size) => {
     const { selectedProduct, cart } = state;
-    const cartItem = {
-      id: selectedProduct.id,
-      name: selectedProduct.name,
-      size,
-      price: selectedProduct[`${size}_price`] || selectedProduct.price,
-      image: selectedProduct.image,
-    };
-    updateState({ cart: [...cart, cartItem], selectedProduct: null });
+    console.log('Adding to cart:', { selectedProduct, size });
+    if (!selectedProduct) {
+      console.error('No selected product to add to cart');
+      return;
+    }
+    try {
+      const cartItem = {
+        id: selectedProduct.id,
+        name: selectedProduct.name,
+        size,
+        price: selectedProduct[`${size}_price`] || selectedProduct.price,
+        image: selectedProduct.image,
+      };
+      console.log('Cart item created:', cartItem);
+      updateState({ cart: [...cart, cartItem], selectedProduct: null });
+    } catch (err) {
+      console.error('Error adding to cart:', err.message);
+      updateState({ error: 'Ошибка добавления в корзину' });
+    }
   };
 
   const getCartSummary = () => {
-    const totalItems = state.cart.length;
-    const totalPrice = state.cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
-    return { totalItems, totalPrice };
+    try {
+      const totalItems = state.cart.length;
+      const totalPrice = state.cart.reduce((sum, item) => {
+        const price = Number(item.price || 0);
+        if (isNaN(price)) {
+          console.warn('Invalid price in cart item:', item);
+        }
+        return sum + price;
+      }, 0);
+      console.log('Cart summary:', { totalItems, totalPrice });
+      return { totalItems, totalPrice };
+    } catch (err) {
+      console.error('Error calculating cart summary:', err.message);
+      return { totalItems: 0, totalPrice: 0 };
+    }
   };
 
   const scrollToCategory = (categoryId) => {
+    console.log('Scrolling to category:', categoryId);
     updateState({ activeCategory: categoryId });
     const element = document.getElementById(`category-${categoryId}`);
-    if (element) element.scrollIntoView({ behavior: 'smooth' });
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      console.warn(`Category element not found: category-${categoryId}`);
+    }
   };
 
   const handleScroll = () => {
@@ -104,22 +169,33 @@ const Product = () => {
       }
     }
 
-    if (currentCategory !== activeCategory) updateState({ activeCategory: currentCategory });
+    if (currentCategory !== activeCategory) {
+      console.log('Active category changed to:', currentCategory);
+      updateState({ activeCategory: currentCategory });
+    }
   };
 
-  const goToCheckout = () => navigate('/checkout');
+  const goToCheckout = () => {
+    console.log('Navigating to checkout');
+    navigate('/checkout');
+  };
 
-  // Рендеринг
   const { selectedBranch, selectedProduct, cart, branches, categories, products, loading, error, activeCategory, orderPlaced } = state;
   const { totalItems, totalPrice } = getCartSummary();
 
+  console.log('Current state:', state);
+
   if (!selectedBranch) {
+    console.log('Rendering branch selection screen');
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="w-full max-w-4xl">
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Выберите филиал</h1>
           {loading && <p className="text-center text-gray-600">Загрузка...</p>}
           {error && <p className="text-center text-red-500">{error}</p>}
+          {!loading && !error && branches.length === 0 && (
+            <p className="text-center text-gray-600">Филиалы не найдены</p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {branches.map((branch) => (
               <button
@@ -127,8 +203,8 @@ const Product = () => {
                 onClick={() => selectBranch(branch)}
                 className="bg-white rounded-xl shadow-lg p-6 text-left hover:bg-orange-500 hover:text-white transition-all duration-300 transform hover:scale-105"
               >
-                <h2 className="text-xl font-semibold">{branch.name}</h2>
-                <p className="text-gray-600 group-hover:text-white">{branch.address}</p>
+                <h2 className="text-xl font-semibold">{branch.name || 'Без названия'}</h2>
+                <p className="text-gray-600 group-hover:text-white">{branch.address || 'Адрес не указан'}</p>
               </button>
             ))}
           </div>
@@ -137,12 +213,12 @@ const Product = () => {
     );
   }
 
+  console.log('Rendering main product screen');
   return (
     <div className="min-h-screen bg-gray-100 py-8">
-      {/* Информация о филиале */}
       <div className="text-center mb-6">
         <p className="text-gray-700">
-          Филиал: {selectedBranch.name}, {selectedBranch.address}
+          Филиал: {selectedBranch.name || 'Без названия'}, {selectedBranch.address || 'Адрес не указан'}
         </p>
         {!orderPlaced && (
           <button
@@ -154,14 +230,21 @@ const Product = () => {
         )}
       </div>
 
-      {/* Фиксированное меню категорий */}
       <div className="sticky top-0 bg-white shadow-lg z-20 py-4">
         <div className="max-w-[1250px] mx-auto px-4 flex justify-center space-x-6 overflow-x-auto">
+          {categories.length === 0 && console.warn('No categories available')}
           {categories.map((category) => {
             const categoryProducts = products.filter(
-              (product) => product.subcategory.category.id === category.id && product.branch.id === selectedBranch.id
+              (product) => {
+                const match = product.subcategory?.category?.id === category.id && product.branch?.id === selectedBranch.id;
+                if (!match) console.log(`Product ${product.id} filtered out`, product);
+                return match;
+              }
             );
-            if (categoryProducts.length === 0) return null;
+            if (categoryProducts.length === 0) {
+              console.log(`No products for category ${category.id}`);
+              return null;
+            }
 
             return (
               <button
@@ -174,7 +257,7 @@ const Product = () => {
                 <span className="flex items-center">
                   {category.emoji && <span className="mr-2 text-xl">{category.emoji}</span>}
                   <span className="relative">
-                    {category.name}
+                    {category.name || 'Без названия'}
                     <span
                       className={`absolute bottom-0 left-0 h-1 bg-orange-500 rounded-full transition-all duration-300 ${
                         activeCategory === category.id ? 'w-full' : 'w-0 group-hover:w-full'
@@ -188,7 +271,6 @@ const Product = () => {
         </div>
       </div>
 
-      {/* Секции категорий и товаров */}
       <div className="max-w-[1250px] mx-auto px-4 pt-8">
         {loading && <p className="text-center text-gray-600">Загрузка...</p>}
         {error && <p className="text-center text-red-500">{error}</p>}
@@ -199,7 +281,7 @@ const Product = () => {
           !error &&
           categories.map((category) => {
             const categoryProducts = products.filter(
-              (product) => product.subcategory.category.id === category.id && product.branch.id === selectedBranch.id
+              (product) => product.subcategory?.category?.id === category.id && product.branch?.id === selectedBranch.id
             );
             if (categoryProducts.length === 0) return null;
 
@@ -218,7 +300,7 @@ const Product = () => {
                       letterSpacing: '2px',
                     }}
                   >
-                    {category.name} {category.emoji || ''}
+                    {category.name || 'Без названия'} {category.emoji || ''}
                   </span>
                   <span
                     className="absolute inset-0 z-0"
@@ -248,17 +330,20 @@ const Product = () => {
                     >
                       <div className="relative">
                         <img
-                          src={product.image}
-                          alt={product.name}
+                          src={product.image || 'https://via.placeholder.com/150?text=Image+Not+Found'}
+                          alt={product.name || 'Без названия'}
                           className="w-full h-56 object-cover"
-                          onError={(e) => (e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found')}
+                          onError={(e) => {
+                            console.warn(`Image failed to load for product ${product.id}`);
+                            e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found';
+                          }}
                         />
                         <div className="absolute top-2 right-2 bg-orange-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
                           Новинка
                         </div>
                       </div>
                       <div className="p-5">
-                        <h3 className="text-xl font-bold text-gray-800">{product.name}</h3>
+                        <h3 className="text-xl font-bold text-gray-800">{product.name || 'Без названия'}</h3>
                         <p className="text-gray-500 text-sm mt-1">
                           от {product.small_price || product.price || 'Не указана'} сом
                         </p>
@@ -277,33 +362,39 @@ const Product = () => {
           })}
       </div>
 
-      {/* Модальное окно */}
       {selectedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl transform transition-all duration-300 scale-100 hover:scale-105">
             <img
-              src={selectedProduct.image}
-              alt={selectedProduct.name}
+              src={selectedProduct.image || 'https://via.placeholder.com/150?text=Image+Not+Found'}
+              alt={selectedProduct.name || 'Без названия'}
               className="w-full h-40 object-cover rounded-t-xl mb-4"
-              onError={(e) => (e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found')}
+              onError={(e) => {
+                console.warn(`Modal image failed to load for product ${selectedProduct.id}`);
+                e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found';
+              }}
             />
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">{selectedProduct.name}</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+              {selectedProduct.name || 'Без названия'}
+            </h2>
             <div className="space-y-3">
-              {['small', 'medium', 'large'].map((size) => (
-                <button
-                  key={size}
-                  onClick={() => addToCart(size)}
-                  className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all duration-300 flex justify-between items-center shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!selectedProduct[`${size}_price`]}
-                >
-                  <span className="capitalize">
-                    {size === 'small' ? 'Маленькая' : size === 'medium' ? 'Средняя' : 'Большая'}
-                  </span>
-                  <span>
-                    {selectedProduct[`${size}_price`] ? `${selectedProduct[`${size}_price`]} сом` : 'Недоступно'}
-                  </span>
-                </button>
-              ))}
+              {['small', 'medium', 'large'].map((size) => {
+                const price = selectedProduct[`${size}_price`];
+                console.log(`Checking price for ${size}:`, price);
+                return (
+                  <button
+                    key={size}
+                    onClick={() => addToCart(size)}
+                    className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all duration-300 flex justify-between items-center shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!price}
+                  >
+                    <span className="capitalize">
+                      {size === 'small' ? 'Маленькая' : size === 'medium' ? 'Средняя' : 'Большая'}
+                    </span>
+                    <span>{price ? `${price} сом` : 'Недоступно'}</span>
+                  </button>
+                );
+              })}
             </div>
             <button
               onClick={closeModal}
@@ -315,7 +406,6 @@ const Product = () => {
         </div>
       )}
 
-      {/* Корзина */}
       {cart.length > 0 && (
         <button
           onClick={goToCheckout}
@@ -332,7 +422,6 @@ const Product = () => {
         </button>
       )}
 
-      {/* Стили */}
       <style jsx>{`
         @keyframes fadeIn {
           0% {
