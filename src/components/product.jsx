@@ -4,16 +4,16 @@ import { useNavigate } from 'react-router-dom';
 // Классовый компонент Product
 class ProductClass extends Component {
   state = {
-    selectedBranch: null, // Выбранный филиал
+    selectedBranch: null,
     cart: [],
-    branches: [], // Список филиалов с бэкенда
-    categories: [], // Список категорий с бэкенда
-    products: [], // Список продуктов с бэкенда
+    branches: [],
+    categories: [],
+    products: [],
     selectedProduct: null,
-    loading: false, // Состояние загрузки
-    error: null, // Ошибка при загрузке данных
-    activeCategory: null, // Для отслеживания активной категории
-    orderPlaced: false, // Статус заказа
+    loading: false,
+    error: null,
+    activeCategory: null,
+    orderPlaced: false,
   };
 
   componentDidMount() {
@@ -22,19 +22,16 @@ class ProductClass extends Component {
     this.fetchProducts();
     window.addEventListener('scroll', this.handleScroll);
 
-    // Загружаем корзину из localStorage, если она есть
     const savedCart = localStorage.getItem('cart');
     if (savedCart) {
       this.setState({ cart: JSON.parse(savedCart) });
     }
 
-    // Проверяем, был ли уже сделан заказ
     const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
     this.setState({ orderPlaced });
   }
 
   componentDidUpdate(prevProps, prevState) {
-    // Сохраняем корзину в localStorage при её изменении
     if (prevState.cart !== this.state.cart) {
       localStorage.setItem('cart', JSON.stringify(this.state.cart));
     }
@@ -110,11 +107,11 @@ class ProductClass extends Component {
   addToCart = (size) => {
     const { selectedProduct, cart } = this.state;
     const cartItem = {
-      id: selectedProduct.id, // Используем 'id' вместо '_id'
+      id: selectedProduct.id,
       name: selectedProduct.name,
       size: size,
-      price: selectedProduct.prices ? selectedProduct.prices[size] : selectedProduct.price,
-      image: selectedProduct.image, // Добавляем изображение в корзину
+      price: selectedProduct[`${size}_price`] || selectedProduct.price,
+      image: selectedProduct.image,
     };
     this.setState({ cart: [...cart, cartItem], selectedProduct: null });
   };
@@ -122,7 +119,7 @@ class ProductClass extends Component {
   getCartSummary = () => {
     const { cart } = this.state;
     const totalItems = cart.length;
-    const totalPrice = cart.reduce((sum, item) => sum + (item.price || 0), 0);
+    const totalPrice = cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
     return { totalItems, totalPrice };
   };
 
@@ -183,12 +180,12 @@ class ProductClass extends Component {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {branches.map((branch) => (
                 <button
-                  key={branch.id} // Используем 'id' вместо '_id'
+                  key={branch.id}
                   onClick={() => this.selectBranch(branch)}
                   className="bg-white rounded-xl shadow-lg p-6 text-left hover:bg-orange-500 hover:text-white transition-all duration-300 transform hover:scale-105"
                 >
                   <h2 className="text-xl font-semibold">{branch.name}</h2>
-                  <p className="text-gray-600 group-hover:text-white">{branch.address}</p> {/* Используем 'address' вместо 'city' */}
+                  <p className="text-gray-600 group-hover:text-white">{branch.address}</p>
                 </button>
               ))}
             </div>
@@ -218,8 +215,8 @@ class ProductClass extends Component {
             {categories.map((category) => {
               const categoryProducts = products.filter(
                 (product) =>
-                  product.subcategory.category === category.id && // Используем 'id' вместо '_id'
-                  product.branch === selectedBranch.id // Фильтрация по филиалу
+                  product.subcategory.category.id === category.id &&
+                  product.branch.id === selectedBranch.id
               );
 
               if (categoryProducts.length === 0) {
@@ -265,8 +262,8 @@ class ProductClass extends Component {
             categories.map((category) => {
               const categoryProducts = products.filter(
                 (product) =>
-                  product.subcategory.category === category.id &&
-                  product.branch === selectedBranch.id
+                  product.subcategory.category.id === category.id &&
+                  product.branch.id === selectedBranch.id
               );
 
               if (categoryProducts.length === 0) {
@@ -316,11 +313,7 @@ class ProductClass extends Component {
                       >
                         <div className="relative">
                           <img
-                            src={
-                              product.image
-                                ? `https://nukesul-boood-2ab7.twc1.net${product.image}`
-                                : 'https://via.placeholder.com/150?text=Image+Not+Found'
-                            }
+                            src={product.image}
                             alt={product.name}
                             className="w-full h-56 object-cover"
                             onError={(e) =>
@@ -334,8 +327,7 @@ class ProductClass extends Component {
                         <div className="p-5">
                           <h3 className="text-xl font-bold text-gray-800">{product.name}</h3>
                           <p className="text-gray-500 text-sm mt-1">
-                            от{' '}
-                            {product.prices?.small || product.price || 'Не указана'} сом
+                            от {product.small_price || product.price || 'Не указана'} сом
                           </p>
                           <button
                             onClick={() => this.openModal(product)}
@@ -357,11 +349,7 @@ class ProductClass extends Component {
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl transform transition-all duration-300 scale-100 hover:scale-105">
               <img
-                src={
-                  selectedProduct.image
-                    ? `https://nukesul-boood-2ab7.twc1.net${selectedProduct.image}`
-                    : 'https://via.placeholder.com/150?text=Image+Not+Found'
-                }
+                src={selectedProduct.image}
                 alt={selectedProduct.name}
                 className="w-full h-40 object-cover rounded-t-xl mb-4"
                 onError={(e) =>
@@ -372,36 +360,23 @@ class ProductClass extends Component {
                 {selectedProduct.name}
               </h2>
               <div className="space-y-3">
-                {selectedProduct.prices &&
-                Object.keys(selectedProduct.prices).some((size) => selectedProduct.prices[size]) ? (
-                  ['small', 'medium', 'large'].map((size) => (
-                    <button
-                      key={size}
-                      onClick={() => this.addToCart(size)}
-                      className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all duration-300 flex justify-between items-center shadow-sm"
-                      disabled={!selectedProduct.prices[size]}
-                    >
-                      <span className="capitalize">
-                        {size === 'small' ? 'Маленькая' : size === 'medium' ? 'Средняя' : 'Большая'}
-                      </span>
-                      <span>
-                        {selectedProduct.prices[size]
-                          ? `${selectedProduct.prices[size]} сом`
-                          : 'Недоступно'}
-                      </span>
-                    </button>
-                  ))
-                ) : (
+                {['small', 'medium', 'large'].map((size) => (
                   <button
-                    onClick={() => this.addToCart('single')}
+                    key={size}
+                    onClick={() => this.addToCart(size)}
                     className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all duration-300 flex justify-between items-center shadow-sm"
+                    disabled={!selectedProduct[`${size}_price`]}
                   >
-                    <span>Единая цена</span>
+                    <span className="capitalize">
+                      {size === 'small' ? 'Маленькая' : size === 'medium' ? 'Средняя' : 'Большая'}
+                    </span>
                     <span>
-                      {selectedProduct.price ? `${selectedProduct.price} сом` : 'Не указана'}
+                      {selectedProduct[`${size}_price`]
+                        ? `${selectedProduct[`${size}_price`]} сом`
+                        : 'Недоступно'}
                     </span>
                   </button>
-                )}
+                ))}
               </div>
               <button
                 onClick={this.closeModal}
