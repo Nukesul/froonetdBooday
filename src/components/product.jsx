@@ -91,7 +91,7 @@ const Product = () => {
     console.log('🏁 Component mounted');
     const loadInitialData = async () => {
       try {
-        // Сначала загружаем только филиалы
+        // Сначала загружаем только 
         await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
         
         // Если филиал 
