@@ -22,25 +22,48 @@ const Product = () => {
     setState((prev) => ({ ...prev, ...newState }));
   };
 
+  const validateData = (data, key) => {
+    if (!Array.isArray(data)) return false;
+    switch (key) {
+      case 'branches':
+        return data.every(item => item.id && item.name && item.address);
+      case 'categories':
+        return data.every(item => item.id && item.name);
+      case 'products':
+        return data.every(item => item.id && item.name && item.branch && item.subcategory);
+      default:
+        return true;
+    }
+  };
+
   const fetchData = useCallback(async (url, key, errorMessage) => {
     console.log(`Fetching data from ${url} for ${key}`);
     try {
       updateState({ loading: true, error: null });
-      const response = await fetch(url);
-      console.log(`Response status for ${key}:`, response.status);
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 10000
+      });
+      
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
+      
       const data = await response.json();
-      console.log(`Data received for ${key}:`, data);
-      if (!Array.isArray(data)) {
-        console.error(`Expected array for ${key}, got:`, data);
-        throw new Error(`Invalid data format for ${key}`);
+      if (!validateData(data, key)) {
+        throw new Error(`Invalid data structure for ${key}`);
       }
+      
       updateState({ [key]: data });
     } catch (err) {
-      console.error(`Error fetching ${key}:`, err.message);
-      updateState({ error: err.message || `Ошибка сервера при загрузке ${key}` });
+      const errorMsg = err.name === 'TypeError' && err.message.includes('Failed to fetch')
+        ? 'Нет соединения с сервером'
+        : err.message || errorMessage;
+      console.error(`Error fetching ${key}:`, errorMsg);
+      updateState({ error: errorMsg });
     } finally {
       updateState({ loading: false });
     }
@@ -48,28 +71,28 @@ const Product = () => {
 
   useEffect(() => {
     console.log('Component mounted, fetching initial data');
-    fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
-    fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий');
-    fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов');
+    const loadInitialData = async () => {
+      try {
+        await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
+        await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий');
+        await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов');
 
-    try {
-      const savedCart = localStorage.getItem('cart');
-      if (savedCart) {
-        const parsedCart = JSON.parse(savedCart);
-        console.log('Loaded cart from localStorage:', parsedCart);
-        updateState({ cart: parsedCart });
-      } else {
-        console.log('No cart found in localStorage');
+        const savedCart = localStorage.getItem('cart');
+        if (savedCart) {
+          const parsedCart = JSON.parse(savedCart);
+          console.log('Loaded cart from localStorage:', parsedCart);
+          updateState({ cart: parsedCart });
+        }
+
+        const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
+        updateState({ orderPlaced });
+      } catch (err) {
+        console.error('Error in initial data load:', err.message);
+        updateState({ error: 'Ошибка инициализации данных' });
       }
+    };
 
-      const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
-      console.log('Order placed status:', orderPlaced);
-      updateState({ orderPlaced });
-    } catch (err) {
-      console.error('Error loading from localStorage:', err.message);
-      updateState({ error: 'Ошибка загрузки данных из localStorage' });
-    }
-
+    loadInitialData();
     window.addEventListener('scroll', handleScroll);
     return () => {
       console.log('Component unmounted, removing scroll listener');
@@ -105,10 +128,7 @@ const Product = () => {
   const addToCart = (size) => {
     const { selectedProduct, cart } = state;
     console.log('Adding to cart:', { selectedProduct, size });
-    if (!selectedProduct) {
-      console.error('No selected product to add to cart');
-      return;
-    }
+    if (!selectedProduct) return;
     try {
       const cartItem = {
         id: selectedProduct.id,
@@ -117,7 +137,6 @@ const Product = () => {
         price: selectedProduct[`${size}_price`] || selectedProduct.price,
         image: selectedProduct.image,
       };
-      console.log('Cart item created:', cartItem);
       updateState({ cart: [...cart, cartItem], selectedProduct: null });
     } catch (err) {
       console.error('Error adding to cart:', err.message);
@@ -130,12 +149,8 @@ const Product = () => {
       const totalItems = state.cart.length;
       const totalPrice = state.cart.reduce((sum, item) => {
         const price = Number(item.price || 0);
-        if (isNaN(price)) {
-          console.warn('Invalid price in cart item:', item);
-        }
         return sum + price;
       }, 0);
-      console.log('Cart summary:', { totalItems, totalPrice });
       return { totalItems, totalPrice };
     } catch (err) {
       console.error('Error calculating cart summary:', err.message);
@@ -149,8 +164,6 @@ const Product = () => {
     const element = document.getElementById(`category-${categoryId}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      console.warn(`Category element not found: category-${categoryId}`);
     }
   };
 
@@ -170,7 +183,6 @@ const Product = () => {
     }
 
     if (currentCategory !== activeCategory) {
-      console.log('Active category changed to:', currentCategory);
       updateState({ activeCategory: currentCategory });
     }
   };
@@ -183,10 +195,18 @@ const Product = () => {
   const { selectedBranch, selectedProduct, cart, branches, categories, products, loading, error, activeCategory, orderPlaced } = state;
   const { totalItems, totalPrice } = getCartSummary();
 
-  console.log('Current state:', state);
+  if (loading && branches.length === 0 && categories.length === 0 && products.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 text-lg">Инициализация данных...</p>
+          <div className="mt-4 loader animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedBranch) {
-    console.log('Rendering branch selection screen');
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="w-full max-w-4xl">
@@ -213,7 +233,6 @@ const Product = () => {
     );
   }
 
-  console.log('Rendering main product screen');
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="text-center mb-6">
@@ -232,19 +251,11 @@ const Product = () => {
 
       <div className="sticky top-0 bg-white shadow-lg z-20 py-4">
         <div className="max-w-[1250px] mx-auto px-4 flex justify-center space-x-6 overflow-x-auto">
-          {categories.length === 0 && console.warn('No categories available')}
           {categories.map((category) => {
             const categoryProducts = products.filter(
-              (product) => {
-                const match = product.subcategory?.category?.id === category.id && product.branch?.id === selectedBranch.id;
-                if (!match) console.log(`Product ${product.id} filtered out`, product);
-                return match;
-              }
+              (product) => product.subcategory?.category?.id === category.id && product.branch?.id === selectedBranch.id
             );
-            if (categoryProducts.length === 0) {
-              console.log(`No products for category ${category.id}`);
-              return null;
-            }
+            if (categoryProducts.length === 0) return null;
 
             return (
               <button
@@ -334,7 +345,6 @@ const Product = () => {
                           alt={product.name || 'Без названия'}
                           className="w-full h-56 object-cover"
                           onError={(e) => {
-                            console.warn(`Image failed to load for product ${product.id}`);
                             e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found';
                           }}
                         />
@@ -370,7 +380,6 @@ const Product = () => {
               alt={selectedProduct.name || 'Без названия'}
               className="w-full h-40 object-cover rounded-t-xl mb-4"
               onError={(e) => {
-                console.warn(`Modal image failed to load for product ${selectedProduct.id}`);
                 e.target.src = 'https://via.placeholder.com/150?text=Image+Not+Found';
               }}
             />
@@ -380,7 +389,6 @@ const Product = () => {
             <div className="space-y-3">
               {['small', 'medium', 'large'].map((size) => {
                 const price = selectedProduct[`${size}_price`];
-                console.log(`Checking price for ${size}:`, price);
                 return (
                   <button
                     key={size}
