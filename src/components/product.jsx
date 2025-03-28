@@ -15,29 +15,46 @@ const Product = () => {
     error: null,
     activeCategory: null,
     orderPlaced: false,
+    isInitialDataLoaded: false,
   });
 
   const updateState = (newState) => {
-    console.log('Updating state with:', newState);
+    console.log('🔄 Updating state with:', newState);
     setState((prev) => ({ ...prev, ...newState }));
   };
 
   const validateData = (data, key) => {
-    if (!Array.isArray(data)) return false;
+    console.log(`🔍 Validating ${key} data structure`);
+    if (!Array.isArray(data)) {
+      console.error(`❌ ${key} is not an array`);
+      return false;
+    }
     switch (key) {
       case 'branches':
-        return data.every(item => item.id && item.name && item.address);
+        return data.every(item => {
+          const isValid = item.id && item.name && item.address;
+          if (!isValid) console.warn(`⚠️ Invalid branch:`, item);
+          return isValid;
+        });
       case 'categories':
-        return data.every(item => item.id && item.name);
+        return data.every(item => {
+          const isValid = item.id && item.name;
+          if (!isValid) console.warn(`⚠️ Invalid category:`, item);
+          return isValid;
+        });
       case 'products':
-        return data.every(item => item.id && item.name && item.branch && item.subcategory);
+        return data.every(item => {
+          const isValid = item.id && item.name && item.branch && item.subcategory;
+          if (!isValid) console.warn(`⚠️ Invalid product:`, item);
+          return isValid;
+        });
       default:
         return true;
     }
   };
 
   const fetchData = useCallback(async (url, key, errorMessage) => {
-    console.log(`Fetching data from ${url} for ${key}`);
+    console.log(`🌐 Fetching ${key} from ${url}`);
     try {
       updateState({ loading: true, error: null });
       const response = await fetch(url, {
@@ -57,12 +74,13 @@ const Product = () => {
         throw new Error(`Invalid data structure for ${key}`);
       }
       
+      console.log(`✅ Successfully fetched ${key}:`, data);
       updateState({ [key]: data });
     } catch (err) {
       const errorMsg = err.name === 'TypeError' && err.message.includes('Failed to fetch')
         ? 'Нет соединения с сервером'
         : err.message || errorMessage;
-      console.error(`Error fetching ${key}:`, errorMsg);
+      console.error(`❌ Error fetching ${key}:`, errorMsg);
       updateState({ error: errorMsg });
     } finally {
       updateState({ loading: false });
@@ -70,24 +88,32 @@ const Product = () => {
   }, []);
 
   useEffect(() => {
-    console.log('Component mounted, fetching initial data');
+    console.log('🏁 Component mounted');
     const loadInitialData = async () => {
       try {
+        // Сначала загружаем только филиалы
         await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
-        await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий');
-        await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов');
+        
+        // Если филиал выбран, загружаем остальное
+        if (state.selectedBranch) {
+          await Promise.all([
+            fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий'),
+            fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов')
+          ]);
+          updateState({ isInitialDataLoaded: true });
+        }
 
         const savedCart = localStorage.getItem('cart');
         if (savedCart) {
           const parsedCart = JSON.parse(savedCart);
-          console.log('Loaded cart from localStorage:', parsedCart);
+          console.log('🛒 Loaded cart from localStorage:', parsedCart);
           updateState({ cart: parsedCart });
         }
 
         const orderPlaced = localStorage.getItem('orderPlaced') === 'true';
         updateState({ orderPlaced });
       } catch (err) {
-        console.error('Error in initial data load:', err.message);
+        console.error('❌ Error in initial data load:', err.message);
         updateState({ error: 'Ошибка инициализации данных' });
       }
     };
@@ -95,39 +121,47 @@ const Product = () => {
     loadInitialData();
     window.addEventListener('scroll', handleScroll);
     return () => {
-      console.log('Component unmounted, removing scroll listener');
+      console.log('🏁 Component unmounted');
       window.removeEventListener('scroll', handleScroll);
     };
-  }, [fetchData]);
+  }, [fetchData, state.selectedBranch]);
 
   useEffect(() => {
-    console.log('Cart updated, saving to localStorage:', state.cart);
+    console.log('🛒 Cart updated:', state.cart);
     try {
       localStorage.setItem('cart', JSON.stringify(state.cart));
+      console.log('✅ Cart saved to localStorage');
     } catch (err) {
-      console.error('Error saving cart to localStorage:', err.message);
+      console.error('❌ Error saving cart:', err.message);
       updateState({ error: 'Ошибка сохранения корзины' });
     }
   }, [state.cart]);
 
   const selectBranch = (branch) => {
-    console.log('Selected branch:', branch);
+    console.log('🏢 Branch selected:', branch);
     updateState({ selectedBranch: branch });
+    // После выбора филиала загружаем остальную информацию
+    Promise.all([
+      fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий'),
+      fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products', 'Ошибка загрузки продуктов')
+    ]).then(() => {
+      updateState({ isInitialDataLoaded: true });
+    });
   };
 
   const openModal = (product) => {
-    console.log('Opening modal for product:', product);
+    console.log('🔍 Opening modal for product:', product);
     updateState({ selectedProduct: product });
   };
 
   const closeModal = () => {
-    console.log('Closing modal');
+    console.log('🔍 Closing modal');
     updateState({ selectedProduct: null });
   };
 
   const addToCart = (size) => {
     const { selectedProduct, cart } = state;
-    console.log('Adding to cart:', { selectedProduct, size });
+    console.log('🛒 Adding to cart:', { product: selectedProduct, size });
     if (!selectedProduct) return;
     try {
       const cartItem = {
@@ -138,8 +172,9 @@ const Product = () => {
         image: selectedProduct.image,
       };
       updateState({ cart: [...cart, cartItem], selectedProduct: null });
+      console.log('✅ Item added to cart:', cartItem);
     } catch (err) {
-      console.error('Error adding to cart:', err.message);
+      console.error('❌ Error adding to cart:', err.message);
       updateState({ error: 'Ошибка добавления в корзину' });
     }
   };
@@ -151,15 +186,16 @@ const Product = () => {
         const price = Number(item.price || 0);
         return sum + price;
       }, 0);
+      console.log('🧮 Cart summary:', { totalItems, totalPrice });
       return { totalItems, totalPrice };
     } catch (err) {
-      console.error('Error calculating cart summary:', err.message);
+      console.error('❌ Error calculating cart summary:', err.message);
       return { totalItems: 0, totalPrice: 0 };
     }
   };
 
   const scrollToCategory = (categoryId) => {
-    console.log('Scrolling to category:', categoryId);
+    console.log('📜 Scrolling to category:', categoryId);
     updateState({ activeCategory: categoryId });
     const element = document.getElementById(`category-${categoryId}`);
     if (element) {
@@ -183,24 +219,25 @@ const Product = () => {
     }
 
     if (currentCategory !== activeCategory) {
+      console.log('📜 Active category changed to:', currentCategory);
       updateState({ activeCategory: currentCategory });
     }
   };
 
   const goToCheckout = () => {
-    console.log('Navigating to checkout');
+    console.log('➡️ Navigating to checkout');
     navigate('/checkout');
   };
 
-  const { selectedBranch, selectedProduct, cart, branches, categories, products, loading, error, activeCategory, orderPlaced } = state;
+  const { selectedBranch, selectedProduct, cart, branches, categories, products, loading, error, activeCategory, orderPlaced, isInitialDataLoaded } = state;
   const { totalItems, totalPrice } = getCartSummary();
 
-  if (loading && branches.length === 0 && categories.length === 0 && products.length === 0) {
+  if (loading && branches.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600 text-lg">Инициализация данных...</p>
-          <div className="mt-4 loader animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mx-auto"></div>
+          <div className="loader animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-orange-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600 text-xl font-semibold">Загрузка филиалов...</p>
         </div>
       </div>
     );
@@ -208,22 +245,21 @@ const Product = () => {
 
   if (!selectedBranch) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl">
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Выберите филиал</h1>
-          {loading && <p className="text-center text-gray-600">Загрузка...</p>}
-          {error && <p className="text-center text-red-500">{error}</p>}
-          {!loading && !error && branches.length === 0 && (
-            <p className="text-center text-gray-600">Филиалы не найдены</p>
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center p-6">
+        <div className="w-full max-w-5xl">
+          <h1 className="text-4xl font-bold text-center text-gray-800 mb-10 animate-fadeIn">Выберите филиал</h1>
+          {error && <p className="text-center text-red-500 mb-6 animate-fadeIn">{error}</p>}
+          {branches.length === 0 && !loading && !error && (
+            <p className="text-center text-gray-600 text-lg animate-fadeIn">Филиалы не найдены</p>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {branches.map((branch) => (
               <button
                 key={branch.id}
                 onClick={() => selectBranch(branch)}
-                className="bg-white rounded-xl shadow-lg p-6 text-left hover:bg-orange-500 hover:text-white transition-all duration-300 transform hover:scale-105"
+                className="bg-white rounded-xl shadow-lg p-6 text-left hover:bg-orange-500 hover:text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl group"
               >
-                <h2 className="text-xl font-semibold">{branch.name || 'Без названия'}</h2>
+                <h2 className="text-2xl font-semibold mb-2">{branch.name || 'Без названия'}</h2>
                 <p className="text-gray-600 group-hover:text-white">{branch.address || 'Адрес не указан'}</p>
               </button>
             ))}
@@ -233,16 +269,28 @@ const Product = () => {
     );
   }
 
+  if (!isInitialDataLoaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="loader animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-orange-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600 text-xl font-semibold">Загрузка данных...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="text-center mb-6">
-        <p className="text-gray-700">
-          Филиал: {selectedBranch.name || 'Без названия'}, {selectedBranch.address || 'Адрес не указан'}
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-10">
+      <div className="text-center mb-8 animate-fadeIn">
+        <p className="text-gray-700 text-lg">
+          Филиал: <span className="font-semibold">{selectedBranch.name || 'Без названия'}</span>, 
+          {selectedBranch.address || 'Адрес не указан'}
         </p>
         {!orderPlaced && (
           <button
             onClick={() => updateState({ selectedBranch: null })}
-            className="text-orange-500 hover:underline text-sm"
+            className="text-orange-500 hover:underline text-sm mt-2"
           >
             Сменить филиал
           </button>
@@ -282,11 +330,11 @@ const Product = () => {
         </div>
       </div>
 
-      <div className="max-w-[1250px] mx-auto px-4 pt-8">
+      <div className="max-w-[1250px] mx-auto px-4 pt-10">
         {loading && <p className="text-center text-gray-600">Загрузка...</p>}
         {error && <p className="text-center text-red-500">{error}</p>}
         {!loading && !error && categories.length === 0 && (
-          <p className="text-center text-gray-600">Категории не найдены</p>
+          <p className="text-center text-gray-600 text-lg">Категории не найдены</p>
         )}
         {!loading &&
           !error &&
@@ -297,9 +345,9 @@ const Product = () => {
             if (categoryProducts.length === 0) return null;
 
             return (
-              <div key={category.id} id={`category-${category.id}`} className="mb-16">
+              <div key={category.id} id={`category-${category.id}`} className="mb-16 animate-fadeIn">
                 <h2
-                  className="text-4xl font-bold text-white mb-10 text-center relative animate-fadeIn"
+                  className="text-4xl font-bold text-white mb-10 text-center relative"
                   style={{ fontFamily: "'Dancing Script', cursive" }}
                 >
                   <span
@@ -320,15 +368,6 @@ const Product = () => {
                         'linear-gradient(90deg, rgba(255, 147, 0, 0) 0%, rgba(255, 147, 0, 0.5) 10%, rgba(255, 147, 0, 0.8) 50%, rgba(255, 147, 0, 0.5) 90%, rgba(255, 147, 0, 0) 100%)',
                       filter: 'blur(8px)',
                       transform: 'scale(1.15)',
-                    }}
-                  />
-                  <span
-                    className="absolute inset-0 z-0"
-                    style={{
-                      background:
-                        'linear-gradient(90deg, rgba(255, 147, 0, 0) 0%, rgba(255, 147, 0, 0.3) 15%, rgba(255, 147, 0, 0.6) 50%, rgba(255, 147, 0, 0.3) 85%, rgba(255, 147, 0, 0) 100%)',
-                      filter: 'blur(12px)',
-                      transform: 'scale(1.2)',
                     }}
                   />
                 </h2>
@@ -373,7 +412,7 @@ const Product = () => {
       </div>
 
       {selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fadeIn">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl transform transition-all duration-300 scale-100 hover:scale-105">
             <img
               src={selectedProduct.image || 'https://via.placeholder.com/150?text=Image+Not+Found'}
@@ -417,7 +456,7 @@ const Product = () => {
       {cart.length > 0 && (
         <button
           onClick={goToCheckout}
-          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-orange-500 text-white px-8 py-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 flex items-center space-x-6"
+          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-orange-500 text-white px-8 py-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 flex items-center space-x-6 animate-fadeIn"
         >
           <div className="flex items-center">
             <span className="font-semibold text-lg">🛒 Заказов:</span>
