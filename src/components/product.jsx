@@ -27,15 +27,20 @@ const Product = () => {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
         },
-        timeout: 10000
+        timeout: 10000,
       });
-      
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
+
       const data = await response.json();
       console.log(`✅ Fetched ${key}:`, data);
+
+      // Проверка структуры данных
+      if (key === 'categories' || key === 'products' || key === 'branches') {
+        return Array.isArray(data) ? data : data.results || [];
+      }
       return data;
     } catch (err) {
       console.error(`❌ Fetch ${key} failed:`, err.message);
@@ -49,53 +54,62 @@ const Product = () => {
       updateState({ loading: true });
       try {
         const branches = await fetchData(
-          'https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 
+          'https://nukesul-boood-2ab7.twc1.net/api/public/branches/',
           'branches'
         );
         updateState({ branches, loading: false });
       } catch (err) {
-        updateState({ 
-          error: 'Не удалось загрузить филиалы', 
-          loading: false 
+        updateState({
+          error: 'Не удалось загрузить филиалы',
+          loading: false,
         });
       }
     };
-    
+
     loadBranches();
     return () => console.log('🏁 Component unmounted');
   }, [fetchData]);
 
   const selectBranch = async (branch) => {
     console.log('🏢 Selected branch:', branch);
-    updateState({ 
-      selectedBranch: branch, 
+    updateState({
+      selectedBranch: branch,
       phase: 'loading',
-      loading: true 
+      loading: true,
+      error: null, // Сбрасываем ошибку перед загрузкой
     });
 
     try {
       const [categories, products] = await Promise.all([
         fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories'),
-        fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products')
+        fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/products/', 'products'),
       ]);
-      
+
       const savedCart = localStorage.getItem('cart');
       if (savedCart) {
         updateState({ cart: JSON.parse(savedCart) });
+      }
+
+      // Проверка на пустые данные
+      if (!categories.length) {
+        throw new Error('Категории не найдены');
+      }
+      if (!products.length) {
+        throw new Error('Продукты не найдены');
       }
 
       updateState({
         categories,
         products,
         phase: 'content',
-        loading: false
+        loading: false,
       });
     } catch (err) {
       updateState({
-        error: 'Ошибка загрузки данных',
+        error: err.message || 'Ошибка загрузки категорий или продуктов',
         phase: 'branches',
         selectedBranch: null,
-        loading: false
+        loading: false,
       });
     }
   };
@@ -103,19 +117,19 @@ const Product = () => {
   const addToCart = (size) => {
     const { selectedProduct, cart } = state;
     if (!selectedProduct) return;
-    
+
     const cartItem = {
       id: selectedProduct.id,
       name: selectedProduct.name,
       size,
-      price: selectedProduct[`${size}_price`] || selectedProduct.price,
+      price: selectedProduct[`${size}_price`] || selectedProduct.price || 0,
       image: selectedProduct.image,
     };
-    
+
     const newCart = [...cart, cartItem];
     updateState({ cart: newCart, selectedProduct: null });
     localStorage.setItem('cart', JSON.stringify(newCart));
-    console.log('🛒 Added to cart:', cartItem);
+    console.log('🛒 Added to cart:', cartItem); // Исправлен синтаксис console.log
   };
 
   const goToCheckout = () => {
@@ -134,25 +148,25 @@ const Product = () => {
           <h1 className="text-5xl font-extrabold text-white text-center mb-12 animate-bounceIn">
             Выберите свой филиал
           </h1>
-          
+
           {loading && (
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-white"></div>
             </div>
           )}
-          
+
           {error && (
             <p className="text-center text-white bg-red-500/80 p-4 rounded-lg mb-6 animate-fadeIn">
               {error}
             </p>
           )}
-          
+
           {!loading && !error && branches.length === 0 && (
             <p className="text-center text-white text-xl animate-fadeIn">
               Филиалы не найдены
             </p>
           )}
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {branches.map(branch => (
               <button
@@ -221,6 +235,14 @@ const Product = () => {
       </header>
 
       <main className="max-w-6xl mx-auto p-6">
+        {error && (
+          <p className="text-center text-red-500 mb-6 animate-fadeIn">{error}</p>
+        )}
+        {categories.length === 0 && !error && (
+          <p className="text-center text-gray-600 text-lg animate-fadeIn">
+            Категории не найдены
+          </p>
+        )}
         {categories.map(category => {
           const categoryProducts = products.filter(
             p => p.subcategory?.category?.id === category.id && p.branch?.id === selectedBranch.id
@@ -230,7 +252,7 @@ const Product = () => {
           return (
             <section key={category.id} className="mb-12 animate-fadeIn">
               <h2 className="text-3xl font-bold text-orange-500 mb-6">
-                {category.name} {category.emoji}
+                {category.name} {category.emoji || ''}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {categoryProducts.map(product => (
@@ -240,12 +262,13 @@ const Product = () => {
                   >
                     <img
                       src={product.image || 'https://via.placeholder.com/300'}
-                      alt={product.name}
+                      alt={product.name || 'Без названия'}
                       className="w-full h-48 object-cover"
+                      onError={(e) => { e.target.src = 'https://via.placeholder.com/300'; }}
                     />
                     <div className="p-4">
                       <h3 className="text-xl font-semibold text-gray-800">
-                        {product.name}
+                        {product.name || 'Без названия'}
                       </h3>
                       <p className="text-gray-600">
                         от {product.small_price || product.price || 0} сом
@@ -270,11 +293,12 @@ const Product = () => {
           <div className="bg-white rounded-xl p-6 max-w-md w-full m-4">
             <img
               src={selectedProduct.image || 'https://via.placeholder.com/300'}
-              alt={selectedProduct.name}
+              alt={selectedProduct.name || 'Без названия'}
               className="w-full h-40 object-cover rounded-t-xl mb-4"
+              onError={(e) => { e.target.src = 'https://via.placeholder.com/300'; }}
             />
             <h3 className="text-2xl font-bold text-gray-800 mb-4">
-              {selectedProduct.name}
+              {selectedProduct.name || 'Без названия'}
             </h3>
             <div className="space-y-3">
               {['small', 'medium', 'large'].map(size => {
@@ -284,9 +308,11 @@ const Product = () => {
                     key={size}
                     onClick={() => addToCart(size)}
                     disabled={!price}
-                    className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all flex justify-between disabled:opacity-50"
+                    className="w-full bg-gray-100 p-3 rounded-lg hover:bg-orange-500 hover:text-white transition-all flex justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className="capitalize">{size}</span>
+                    <span className="capitalize">
+                      {size === 'small' ? 'Маленький' : size === 'medium' ? 'Средний' : 'Большой'}
+                    </span>
                     <span>{price ? `${price} сом` : 'Нет'}</span>
                   </button>
                 );
