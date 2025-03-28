@@ -94,7 +94,7 @@ const Product = () => {
         // Сначала загружаем только филиалы
         await fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/branches/', 'branches', 'Ошибка загрузки филиалов');
         
-        // Если филиал выбран, загружаем остальное
+        // Если филиал 
         if (state.selectedBranch) {
           await Promise.all([
             fetchData('https://nukesul-boood-2ab7.twc1.net/api/public/categories/', 'categories', 'Ошибка загрузки категорий'),
